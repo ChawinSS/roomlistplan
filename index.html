@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+
+  <title>Demo</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h2, h3, h4 {
+      margin: 10px 0;
+    }
+
+    .floor-section {
+      margin: 40px 0;
+    }
+
+    .container-wrapper {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .container {
+      width: 200px;
+      min-height: 200px;
+      border: 2px dashed #aaa;
+      border-radius: 8px;
+      padding: 10px;
+      background-color: #f9f9f9;
+    }
+
+    .container.drag-over {
+      background-color: #d1ffd1;
+    }
+
+    .item {
+      background-color: #eee;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 6px;
+      margin: 6px 0;
+      cursor: move;
+      font-size: 12px;
+    }
+
+    .item.selected {
+      border: 2px solid #007bff;
+      background-color: #e0f0ff;
+    }
+
+    .checkboxes {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 4px;
+    }
+
+    .checkboxes label {
+      font-size: 11px;
+    }
+
+    .controls {
+      margin: 30px 0 10px;
+    }
+
+    label.lock-label {
+      font-size: 13px;
+      margin-left: 20px;
+    }
+
+    .container.empty {
+  background-color: #ffffff;
+}
+
+.container.departure {
+  background-color: #88304E;
+}
+
+.container.stay-nc {
+  background-color: #60B5FF;
+}
+
+.container.stay-c {
+  background-color: #FFD95F;
+}
+
+.container.check {
+  background-color: #CCDF92;
+}
+
+  </style>
+</head>
+<body>
+  <h2>Demo</h2>
+
+  <div style="margin-top: 30px;">
+    <label for="date">Date: </label>
+    <input type="date" id="date" name="date" />
+
+    <label for="extraTB" style="margin-left: 15px;">Extra TB: </label>
+    <input type="text" id="extraTB" name="extraTB" min="0" />
+
+    <label for="tb" style="margin-left: 15px;">TB: </label>
+    <input type="text" id="tb" name="tb" min="0" />
+
+    <button onclick="resetItems()" style="margin-left: 15px;">Reset All Items</button>
+    <button onclick="previewAndExport()" style="margin-left: 15px;">Preview and Export</button>
+  </div>
+
+  <div style="margin: 30px auto; max-width: 800px;">
+    <label for="comment" style="display: block; margin-bottom: 8px; font-weight: bold;">Comment:</label>
+    <textarea id="comment" name="comment" rows="4" style="width: 100%; padding: 10px; font-size: 14px; resize: vertical;" placeholder="Enter comment here..."></textarea>
+  </div>
+
+  <div id="floors-container"></div>
+
+  <script>
+    const floorData = [
+      { floor: 1, items: [101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 114, 116, 117, 118, 119, 120, 121, 122, 123, 124] },
+      { floor: 2, items: [201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 214, 216, 217, 218, 219, 220, 221, 222, 223, 224] },
+      { floor: 3, items: [301, 302, 303, 304, 305, 306, 307, 308, 309, 310, 311, 312, 314, 316, 317, 318, 319, 320, 321, 322] },
+      { floor: 4, items: [401, 402, 403, 404, 405, 406, 407, 408, 409, 410, 411, 412, 414, 416, 417, 418, 419, 420, 421, 422] },
+      { floor: 5, items: [501, 502, 503, 504, 505, 506, 507, 508, 509, 510, 511, 512, 514, 516, 517, 518, 519, 520, 521, 522] },
+      { floor: 6, items: [601, 602, 603, 604, 605, 606, 607, 608, 609, 610, 611, 612, 614, 616, 617, 618, 619, 620] },
+      { floor: 7, items: [701, 702, 703, 704, 705, 706, 707, 708, 709, 710, 711, 712, 714, 716, 717, 718, 719, 720] },
+      { floor: 8, items: [801, 802, 803, 804, 805, 806, 807, 808, 809, 810, 811, 812, 814, 816, 817, 818, 819, 820] },
+    ];
+
+    const floorsContainer = document.getElementById("floors-container");
+    const selectedItems = new Set();
+    const originalContainers = new Map(); // For reset
+    let draggedItem = null;
+
+    function createFloor(floor, items) {
+      const section = document.createElement("div");
+      section.className = "floor-section";
+
+      const header = document.createElement("h3");
+      header.innerHTML = `Floor ${floor} <label class="lock-label"><input type="checkbox" onchange="toggleLock(${floor})" id="lock-floor-${floor}" /> Lock Drag</label>`;
+      section.appendChild(header);
+
+      const wrapper = document.createElement("div");
+      wrapper.className = "container-wrapper";
+
+      const labels = ["Empty", "Departure", "Stay No Clean", "Stay Clean", "Check"];
+
+      for (let i = 1; i <= 5; i++) {
+        const container = document.createElement("div");
+        const colorClasses = ["empty", "departure", "stay-nc", "stay-c", "check"];
+      container.className = `container ${colorClasses[i - 1]}`;
+
+        container.id = `floor${floor}-container${i}`;
+
+        const label = document.createElement("h4");
+        label.textContent = labels[i - 1];
+        container.appendChild(label);
+
+        container.addEventListener("dragover", e => {
+          e.preventDefault();
+          container.classList.add("drag-over");
+        });
+
+        container.addEventListener("dragleave", () => {
+          container.classList.remove("drag-over");
+        });
+
+        container.addEventListener("drop", () => {
+  container.classList.remove("drag-over");
+
+  selectedItems.forEach(item => {
+    const roomNumber = parseInt(item.id.replace("item-", ""));
+    const itemFloor = Math.floor(roomNumber / 100);
+    
+    if (itemFloor === floor) {
+      container.appendChild(item);
+    } else {
+      alert(`Room ${roomNumber} belongs to Floor ${itemFloor}, not Floor ${floor}.`);
+    }
+  });
+
+  sortItems(container);
+  selectedItems.clear();
+  document.querySelectorAll(".item").forEach(i => i.classList.remove("selected"));
+});
+
+
+        wrapper.appendChild(container);
+      }
+
+      const emptyContainer = wrapper.querySelector(`#floor${floor}-container1`);
+      items.forEach(num => {
+        const item = document.createElement("div");
+        item.className = "item";
+        item.draggable = true;
+        item.id = `item-${num}`;
+        const allowed3PaxRooms = [
+  402, 406, 407, 410, 411, 414, 419, 421,
+  502, 506, 507, 510, 511, 514, 519, 521,
+  602, 605, 606, 607, 610, 611, 614, 618,
+  702, 705, 706, 707, 710, 711, 714, 718,
+  802, 805, 806, 807, 810, 811, 814, 818
+];
+
+let checkboxHTML = `
+  <label><input type="checkbox" /> ASB</label>
+  ${allowed3PaxRooms.includes(num) ? '<label><input type="checkbox" /> 3PAX</label>' : ''}
+  <label><input type="checkbox" /> 14c/l</label>
+  <label><input type="checkbox" /> 16c/l</label>
+`;
+
+
+      item.innerHTML = `
+      <div><strong>Room ${num}</strong></div>
+      <div class="checkboxes">${checkboxHTML}</div>
+      `;
+
+
+        item.addEventListener("click", () => {
+          item.classList.toggle("selected");
+          selectedItems.has(item) ? selectedItems.delete(item) : selectedItems.add(item);
+        });
+
+        item.addEventListener("dragstart", () => {
+          draggedItem = item;
+          if (!selectedItems.has(item)) {
+            selectedItems.clear();
+            document.querySelectorAll(".item").forEach(i => i.classList.remove("selected"));
+            item.classList.add("selected");
+            selectedItems.add(item);
+          }
+        });
+
+        emptyContainer.appendChild(item);
+        originalContainers.set(item.id, emptyContainer); // Save original container
+      });
+
+      section.appendChild(wrapper);
+      floorsContainer.appendChild(section);
+      floorsContainer.appendChild(document.createElement('hr'));
+
+    }
+
+    function toggleLock(floor) {
+  const locked = document.getElementById(`lock-floor-${floor}`).checked;
+  const containers = document.querySelectorAll(`[id^="floor${floor}-container"]`);
+  containers.forEach(container => {
+    container.querySelectorAll(".item").forEach(item => {
+      item.draggable = !locked;
+    });
+  });
+}
+
+    function resetItems() {
+      selectedItems.clear();
+      document.querySelectorAll(".item.selected").forEach(i => i.classList.remove("selected"));
+
+      floorData.forEach(({ floor, items }) => {
+        const container = document.getElementById(`floor${floor}-container1`);
+        items.forEach(num => {
+          const item = document.getElementById(`item-${num}`);
+          if (item) container.appendChild(item);
+        });
+        sortItems(container);
+      });
+    }
+
+    function sortItems(container) {
+      const items = Array.from(container.querySelectorAll(".item"));
+      items.sort((a, b) => {
+        const numA = parseInt(a.querySelector("strong").textContent.replace("Room ", ""));
+        const numB = parseInt(b.querySelector("strong").textContent.replace("Room ", ""));
+        return numA - numB;
+      });
+      items.forEach(item => container.appendChild(item));
+    }
+
+    floorData.forEach(floor => createFloor(floor.floor, floor.items));
+
+    document.addEventListener("dragend", () => {
+      draggedItem = null;
+    });
+
+    async function previewAndExport() {
+  const date = document.getElementById("date").value;
+  const extraTB = document.getElementById("extraTB").value;
+  const tb = document.getElementById("tb").value;
+  const comment = document.getElementById("comment").value;
+
+// Room coordinates (example: you must add all real positions)
+const roomCoordinates = {
+  "101": { x: 125, y: 49 },
+  "102": { x: 141, y: 49 },
+  "103": { x: 156, y: 49 },
+  "104": { x: 172, y: 49 },
+  "105": { x: 187, y: 49 },
+  "106": { x: 202, y: 49 },
+  "107": { x: 218, y: 49 },
+  "108": { x: 233, y: 49 },
+  "109": { x: 249, y: 49 },
+  "110": { x: 264, y: 49 },
+  "111": { x: 279, y: 49 },
+  "112": { x: 295, y: 49 },
+  "114": { x: 310, y: 49 },
+  "116": { x: 325, y: 49 },
+  "117": { x: 340, y: 49 },
+  "118": { x: 356, y: 49 },
+  "119": { x: 371, y: 49 },
+  "120": { x: 386, y: 49 },
+  "121": { x: 402, y: 49 },
+  "122": { x: 417, y: 49 },
+  "123": { x: 432, y: 49 },
+  "124": { x: 447, y: 49 },
+
+  "201": { x: 125, y: 129 },
+  "202": { x: 141, y: 129 },
+  "203": { x: 156, y: 129 },
+  "204": { x: 172, y: 129 },
+  "205": { x: 187, y: 129 },
+  "206": { x: 202, y: 129 },
+  "207": { x: 218, y: 129 },
+  "208": { x: 233, y: 129 },
+  "209": { x: 249, y: 129 },
+  "210": { x: 264, y: 129 },
+  "211": { x: 279, y: 129 },
+  "212": { x: 295, y: 129 },
+  "214": { x: 310, y: 129 },
+  "216": { x: 325, y: 129 },
+  "217": { x: 340, y: 129 },
+  "218": { x: 356, y: 129 },
+  "219": { x: 371, y: 129 },
+  "220": { x: 386, y: 129 },
+  "221": { x: 402, y: 129 },
+  "222": { x: 417, y: 129 },
+  "223": { x: 432, y: 129 },
+  "224": { x: 447, y: 129 },
+
+  "301": { x: 125, y: 234 },
+  "302": { x: 141, y: 234 },
+  "303": { x: 156, y: 234 },
+  "304": { x: 172, y: 234 },
+  "305": { x: 187, y: 234 },
+  "306": { x: 202, y: 234 },
+  "307": { x: 218, y: 234 },
+  "308": { x: 233, y: 234 },
+  "309": { x: 249, y: 234 },
+  "310": { x: 264, y: 234 },
+  "311": { x: 279, y: 234 },
+  "312": { x: 295, y: 234 },
+  "314": { x: 310, y: 234 },
+  "316": { x: 325, y: 234 },
+  "317": { x: 340, y: 234 },
+  "318": { x: 356, y: 234 },
+  "319": { x: 371, y: 234 },
+  "320": { x: 386, y: 234 },
+  "321": { x: 402, y: 234 },
+  "322": { x: 417, y: 234 },
+
+  "401": { x: 125, y: 323 },
+  "402": { x: 141, y: 323 },
+  "403": { x: 156, y: 323 },
+  "404": { x: 172, y: 323 },
+  "405": { x: 187, y: 323 },
+  "406": { x: 202, y: 323 },
+  "407": { x: 218, y: 323 },
+  "408": { x: 233, y: 323 },
+  "409": { x: 249, y: 323 },
+  "410": { x: 264, y: 323 },
+  "411": { x: 279, y: 323 },
+  "412": { x: 295, y: 323 },
+  "414": { x: 310, y: 323 },
+  "416": { x: 325, y: 323 },
+  "417": { x: 340, y: 323 },
+  "418": { x: 356, y: 323 },
+  "419": { x: 371, y: 323 },
+  "420": { x: 386, y: 323 },
+  "421": { x: 402, y: 323 },
+  "422": { x: 417, y: 323 },
+
+  "501": { x: 125, y: 412 },
+  "502": { x: 141, y: 412 },
+  "503": { x: 156, y: 412 },
+  "504": { x: 172, y: 412 },
+  "505": { x: 187, y: 412 },
+  "506": { x: 202, y: 412 },
+  "507": { x: 218, y: 412 },
+  "508": { x: 233, y: 412 },
+  "509": { x: 249, y: 412 },
+  "510": { x: 264, y: 412 },
+  "511": { x: 279, y: 412 },
+  "512": { x: 295, y: 412 },
+  "514": { x: 310, y: 412 },
+  "516": { x: 325, y: 412 },
+  "517": { x: 340, y: 412 },
+  "518": { x: 356, y: 412 },
+  "519": { x: 371, y: 412 },
+  "520": { x: 386, y: 412 },
+  "521": { x: 402, y: 412 },
+  "522": { x: 417, y: 412 },
+
+  "601": { x: 125, y: 502 },
+  "602": { x: 141, y: 502 },
+  "603": { x: 156, y: 502 },
+  "604": { x: 172, y: 502 },
+  "605": { x: 187, y: 502 },
+  "606": { x: 202, y: 502 },
+  "607": { x: 218, y: 502 },
+  "608": { x: 233, y: 502 },
+  "609": { x: 249, y: 502 },
+  "610": { x: 264, y: 502 },
+  "611": { x: 279, y: 502 },
+  "612": { x: 295, y: 502 },
+  "614": { x: 310, y: 502 },
+  "616": { x: 325, y: 502 },
+  "617": { x: 340, y: 502 },
+  "618": { x: 356, y: 502 },
+  "619": { x: 371, y: 502 },
+  "620": { x: 386, y: 502 },
+
+  "701": { x: 125, y: 597},
+  "702": { x: 141, y: 597 },
+  "703": { x: 156, y: 597 },
+  "704": { x: 172, y: 597 },
+  "705": { x: 187, y: 597 },
+  "706": { x: 202, y: 597 },
+  "707": { x: 218, y: 597 },
+  "708": { x: 233, y: 597 },
+  "709": { x: 249, y: 597 },
+  "710": { x: 264, y: 597 },
+  "711": { x: 279, y: 597 },
+  "712": { x: 295, y: 597 },
+  "714": { x: 310, y: 597 },
+  "716": { x: 325, y: 597 },
+  "717": { x: 340, y: 597 },
+  "718": { x: 356, y: 597 },
+  "719": { x: 371, y: 597 },
+  "720": { x: 386, y: 597 },
+
+  "801": { x: 125, y: 692 },
+  "802": { x: 141, y: 692 },
+  "803": { x: 156, y: 692 },
+  "804": { x: 172, y: 692 },
+  "805": { x: 187, y: 692 },
+  "806": { x: 202, y: 692 },
+  "807": { x: 218, y: 692 },
+  "808": { x: 233, y: 692 },
+  "809": { x: 249, y: 692 },
+  "810": { x: 264, y: 692 },
+  "811": { x: 279, y: 692 },
+  "812": { x: 295, y: 692 },
+  "814": { x: 310, y: 692 },
+  "816": { x: 325, y: 692 },
+  "817": { x: 340, y: 692 },
+  "818": { x: 356, y: 692 },
+  "819": { x: 371, y: 692 },
+  "820": { x: 386, y: 692 },  
+
+};
+
+const labelCoordinates = {
+  "101": { x: 105, y: 80 },
+  "102": { x: 121, y: 80 },
+  "103": { x: 137, y: 80 },
+  "104": { x: 153, y: 80 },
+  "105": { x: 169, y: 80 },
+  "106": { x: 184, y: 80 },
+  "107": { x: 200, y: 80 },
+  "108": { x: 214, y: 80 },
+  "109": { x: 230, y: 80 },
+  "110": { x: 246, y: 80 },
+  "111": { x: 262, y: 80 },
+  "112": { x: 277, y: 80 },
+  "114": { x: 290, y: 80 },
+  "116": { x: 306, y: 80 },
+  "117": { x: 320, y: 80 },
+  "118": { x: 337, y: 80 },
+  "119": { x: 353, y: 80 },
+  "120": { x: 369, y: 80 },
+  "121": { x: 384, y: 80 },
+  "122": { x: 398, y: 80 },
+  "123": { x: 414, y: 80 },
+  "124": { x: 429, y: 80 },
+
+  "201": { x: 105, y: 175 },
+  "202": { x: 121, y: 175 },
+  "203": { x: 137, y: 175 },
+  "204": { x: 153, y: 175 },
+  "205": { x: 169, y: 175 },
+  "206": { x: 184, y: 175 },
+  "207": { x: 200, y: 175 },
+  "208": { x: 214, y: 175 },
+  "209": { x: 230, y: 175 },
+  "210": { x: 246, y: 175 },
+  "211": { x: 262, y: 175 },
+  "212": { x: 277, y: 175 },
+  "214": { x: 290, y: 175 },
+  "216": { x: 306, y: 175 },
+  "217": { x: 320, y: 175 },
+  "218": { x: 337, y: 175 },
+  "219": { x: 353, y: 175 },
+  "220": { x: 369, y: 175 },
+  "221": { x: 384, y: 175 },
+  "222": { x: 398, y: 175 },
+  "223": { x: 414, y: 175 },
+  "224": { x: 429, y: 175 },
+
+  "301": { x: 105, y: 264 },
+  "302": { x: 121, y: 264 },
+  "303": { x: 137, y: 264 },
+  "304": { x: 153, y: 264 },
+  "305": { x: 169, y: 264 },
+  "306": { x: 184, y: 264 },
+  "307": { x: 200, y: 264 },
+  "308": { x: 214, y: 264 },
+  "309": { x: 230, y: 264 },
+  "310": { x: 246, y: 264 },
+  "311": { x: 262, y: 264 },
+  "312": { x: 277, y: 264 },
+  "314": { x: 290, y: 264 },
+  "316": { x: 306, y: 264 },
+  "317": { x: 320, y: 264 },
+  "318": { x: 337, y: 264 },
+  "319": { x: 353, y: 264 },
+  "320": { x: 369, y: 264 },
+  "321": { x: 384, y: 264 },
+  "322": { x: 398, y: 264 },
+
+  "401": { x: 105, y: 353 },
+  "402": { x: 121, y: 353 },
+  "403": { x: 137, y: 353 },
+  "404": { x: 153, y: 353 },
+  "405": { x: 169, y: 353 },
+  "406": { x: 184, y: 353 },
+  "407": { x: 200, y: 353 },
+  "408": { x: 214, y: 353 },
+  "409": { x: 230, y: 353 },
+  "410": { x: 246, y: 353 },
+  "411": { x: 262, y: 353 },
+  "412": { x: 277, y: 353 },
+  "414": { x: 290, y: 353 },
+  "416": { x: 306, y: 353 },
+  "417": { x: 320, y: 353 },
+  "418": { x: 337, y: 353 },
+  "419": { x: 353, y: 353 },
+  "420": { x: 369, y: 353 },
+  "421": { x: 384, y: 353 },
+  "422": { x: 398, y: 353 },
+
+  "501": { x: 105, y: 443 },
+  "502": { x: 121, y: 443 },
+  "503": { x: 137, y: 443 },
+  "504": { x: 153, y: 443 },
+  "505": { x: 169, y: 443 },
+  "506": { x: 184, y: 443 },
+  "507": { x: 200, y: 443 },
+  "508": { x: 214, y: 443 },
+  "509": { x: 230, y: 443 },
+  "510": { x: 246, y: 443 },
+  "511": { x: 262, y: 443 },
+  "512": { x: 277, y: 443 },
+  "514": { x: 290, y: 443 },
+  "516": { x: 306, y: 443 },
+  "517": { x: 320, y: 443 },
+  "518": { x: 337, y: 443 },
+  "519": { x: 353, y: 443 },
+  "520": { x: 369, y: 443 },
+  "521": { x: 384, y: 443 },
+  "522": { x: 398, y: 443 },
+
+  "601": { x: 105, y: 538 },
+  "602": { x: 121, y: 538 },
+  "603": { x: 137, y: 538 },
+  "604": { x: 153, y: 538 },
+  "605": { x: 169, y: 538 },
+  "606": { x: 184, y: 538 },
+  "607": { x: 200, y: 538 },
+  "608": { x: 214, y: 538 },
+  "609": { x: 230, y: 538 },
+  "610": { x: 246, y: 538 },
+  "611": { x: 262, y: 538 },
+  "612": { x: 277, y: 538 },
+  "614": { x: 290, y: 538 },
+  "616": { x: 306, y: 538 },
+  "617": { x: 320, y: 538 },
+  "618": { x: 337, y: 538 },
+  "619": { x: 353, y: 538 },
+  "620": { x: 369, y: 538 },
+
+  "701": { x: 105, y: 633},
+  "702": { x: 121, y: 633 },
+  "703": { x: 137, y: 633 },
+  "704": { x: 153, y: 633 },
+  "705": { x: 169, y: 633 },
+  "706": { x: 184, y: 633 },
+  "707": { x: 200, y: 633 },
+  "708": { x: 214, y: 633 },
+  "709": { x: 230, y: 633 },
+  "710": { x: 246, y: 633 },
+  "711": { x: 262, y: 633 },
+  "712": { x: 277, y: 633 },
+  "714": { x: 290, y: 633 },
+  "716": { x: 306, y: 633 },
+  "717": { x: 320, y: 633 },
+  "718": { x: 337, y: 633 },
+  "719": { x: 353, y: 633 },
+  "720": { x: 369, y: 633 },
+
+  "801": { x: 105, y: 728 },
+  "802": { x: 121, y: 728 },
+  "803": { x: 137, y: 728 },
+  "804": { x: 153, y: 728 },
+  "805": { x: 169, y: 728 },
+  "806": { x: 184, y: 728 },
+  "807": { x: 200, y: 728 },
+  "808": { x: 214, y: 728 },
+  "809": { x: 230, y: 728 },
+  "810": { x: 246, y: 728 },
+  "811": { x: 262, y: 728 },
+  "812": { x: 277, y: 728 },
+  "814": { x: 290, y: 728 },
+  "816": { x: 306, y: 728 },
+  "817": { x: 320, y: 728 },
+  "818": { x: 337, y: 728 },
+  "819": { x: 353, y: 728 },
+  "820": { x: 369, y: 728 },  
+};
+
+
+// Drag container colors
+const colorMap = {
+  'empty': null, // No color, just allow label logic to run
+  'departure': PDFLib.rgb(0.53, 0.19, 0.31),
+  'stay-nc': PDFLib.rgb(0.38, 0.71, 1.0),
+  'stay-c': PDFLib.rgb(1.0, 0.85, 0.37),
+  'check': PDFLib.rgb(0.8, 0.9, 0.57)
+};
+
+
+
+  try {
+    const existingPdfBytes = await fetch('roomlist.pdf').then(res => res.arrayBuffer());
+    const pdfDoc = await PDFLib.PDFDocument.load(existingPdfBytes);
+
+    const pages = pdfDoc.getPages();
+    const firstPage = pages[0];
+    const { width, height } = firstPage.getSize();
+
+    // Draw Date (vertical)
+    firstPage.drawText(`Date: ${date}`, {
+      x: 50,
+      y: 700,
+      size: 14,
+      color: PDFLib.rgb(0, 0, 0),
+      rotate: PDFLib.degrees(90),
+    });
+
+    // Draw Extra TB (vertical)
+    firstPage.drawText(`Extra TB: ${extraTB}`, {
+      x: 50,
+      y: 40,
+      size: 14,
+      color: PDFLib.rgb(0, 0, 0),
+      rotate: PDFLib.degrees(90),
+    });
+
+    // Draw TB (vertical)
+    firstPage.drawText(`TB: ${tb}`, {
+      x: 70,
+      y: 40,
+      size: 14,
+      color: PDFLib.rgb(0, 0, 0),
+      rotate: PDFLib.degrees(90),
+    });
+
+    // Draw Comment (vertical, multi-line)
+    const wrappedLines = wrapText(comment, 40); // Adjust wrap length
+    let commentX = 450;
+    const commentY = 40;
+
+    wrappedLines.forEach(line => {
+      firstPage.drawText(line, {
+        x: commentX,
+        y: commentY,
+        size: 12,
+        color: PDFLib.rgb(0, 0, 0),
+        rotate: PDFLib.degrees(90),
+      });
+      commentX += 10;
+    });
+    
+    const floorBoxSize = {
+  1: { width: 90, height: 15 },
+  2: { width: 95, height: 15 },
+  3: { width: 90, height: 15 },
+  4: { width: 90, height: 15 },
+  5: { width: 90, height: 15 },
+  6: { width: 90, height: 15 },
+  7: { width: 90, height: 15 },
+  8: { width: 90, height: 15 },
+  };
+  
+  
+    const floorYOffset = {
+  1: 0,
+  2: 10,
+  3: 0,
+  4: 0,
+  5: 0,
+  6: 5,
+  7: 5,
+  8: 5,
+  };
+  floorData.forEach(({ floor, items }) => {
+  const isLocked = document.getElementById(`lock-floor-${floor}`).checked;
+  if (!isLocked) return;
+
+  const yOffset = floorYOffset[floor] || 0;
+  const { width: rectW, height: rectH } = floorBoxSize[floor] || { width: 90, height: 15 };
+
+  items.forEach(num => {
+    const el = document.getElementById(`item-${num}`);
+    if (!el) return;
+
+    const parent = el.parentElement;
+const containerType = Object.keys(colorMap).find(cls => parent.classList.contains(cls));
+if (!containerType) return;
+
+const color = colorMap[containerType];
+const coords = roomCoordinates[String(num)]; // ← Moved up!
+if (!coords) return;
+
+// Draw square only if there is a color defined
+if (color) {
+  firstPage.drawRectangle({
+    x: coords.x - rectH,
+    y: coords.y + yOffset,
+    width: rectW,
+    height: rectH,
+    color,
+    opacity: 0.45,
+    rotate: PDFLib.degrees(90),
+  });
+}
+
+
+
+    const checkedInputs = Array.from(el.querySelectorAll('input[type="checkbox"]:checked'));
+    
+const labelCoords = labelCoordinates[String(num)];
+
+if (labelCoords) {
+  checkedInputs.forEach((input, index) => {
+    const labelText = input.parentElement.textContent.trim();
+    firstPage.drawText(labelText, {
+      x: labelCoords.x + index * 10,
+      y: labelCoords.y,
+      size: 9,
+      color: PDFLib.rgb(0, 0, 0),
+      rotate: PDFLib.degrees(90),
+    });
+  });
+}
+
+
+  });
+});
+
+
+
+    // Save and open
+    const pdfBytes = await pdfDoc.save();
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    window.open(url);
+  } catch (error) {
+    alert("Error loading or writing to PDF: " + error.message);
+    console.error(error);
+  }
+}
+
+function wrapText(text, maxLineLength) {
+    const words = text.split(" ");
+    const lines = [];
+    let currentLine = "";
+
+    for (const word of words) {
+      if ((currentLine + word).length > maxLineLength) {
+        lines.push(currentLine.trim());
+        currentLine = word + " ";
+      } else {
+        currentLine += word + " ";
+      }
+    }
+
+    if (currentLine.trim()) lines.push(currentLine.trim());
+    return lines;
+  }
+
+  </script>
+</body>
+</html>
